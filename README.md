@@ -28,3 +28,17 @@ npm run dev
 - API route для OpenAI/другого AI API
 - Настоящая генерация изображений
 - YooKassa/CryptoBot для покупки кредитов
+
+## v6 RockAPI Chat
+
+Добавлено:
+- Vercel API route: `/api/chat`
+- AI-чат через RockAPI OpenAI-compatible API
+- сохранение чат-запросов в историю Firestore
+
+Переменные Vercel:
+- `ROCKAPI_KEY` — ключ RockAPI, без VITE_
+- `ROCKAPI_BASE_URL` — `https://api.rockapi.ru/openai/v1`
+- `ROCKAPI_CHAT_MODEL` — опционально, по умолчанию `gpt-4o-mini`
+
+После добавления переменных обязательно сделать Redeploy.
