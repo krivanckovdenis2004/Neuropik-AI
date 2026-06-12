@@ -1,5 +1,12 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, setPersistence, browserLocalPersistence } from 'firebase/auth';
+import {
+  initializeAuth,
+  getAuth,
+  indexedDBLocalPersistence,
+  browserLocalPersistence,
+  browserSessionPersistence,
+  setPersistence
+} from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 
 const firebaseConfig = {
@@ -12,8 +19,26 @@ const firebaseConfig = {
 };
 
 export const app = initializeApp(firebaseConfig);
-export const auth = getAuth(app);
-export const authReady = setPersistence(auth, browserLocalPersistence).catch((error) => {
-  console.error('Firebase auth persistence error:', error);
+
+let authInstance;
+try {
+  // Важно: initializeAuth задает постоянную сессию ДО первого использования Auth.
+  // Это исправляет слет авторизации после обновления страницы, особенно на iPhone/Safari.
+  authInstance = initializeAuth(app, {
+    persistence: [indexedDBLocalPersistence, browserLocalPersistence, browserSessionPersistence]
+  });
+} catch (error) {
+  // Если Auth уже был создан при hot reload/dev, берем существующий экземпляр.
+  authInstance = getAuth(app);
+}
+
+export const auth = authInstance;
+export const authReady = setPersistence(auth, indexedDBLocalPersistence).catch(async () => {
+  try {
+    await setPersistence(auth, browserLocalPersistence);
+  } catch (error) {
+    console.error('Firebase auth persistence error:', error);
+  }
 });
+
 export const db = getFirestore(app);
