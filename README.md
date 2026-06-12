@@ -42,3 +42,10 @@ npm run dev
 - `ROCKAPI_CHAT_MODEL` — опционально, по умолчанию `gpt-4o-mini`
 
 После добавления переменных обязательно сделать Redeploy.
+
+
+## v8 notes
+- Firebase Auth persistence fixed with browserLocalPersistence.
+- Image model switched to dall-e-3 by default.
+- Optional Vercel env: ROCKAPI_IMAGE_MODEL=dall-e-3 or dall-e-2.
+- DALL·E 3 standard 1024x1024 costs more than 10 RUB in RockAPI, so top up balance before testing images.
