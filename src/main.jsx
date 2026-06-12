@@ -1,14 +1,14 @@
 import React, {useEffect, useState} from 'react';
 import { createRoot } from 'react-dom/client';
-import { Brain, Image, MessageSquare, Zap, Shield, Lock, Rocket, Infinity, Gift, User, Globe2, ArrowRight, Download, Send, Menu, X } from 'lucide-react';
+import { Brain, Image, MessageSquare, Zap, Shield, Lock, Rocket, Infinity, Gift, User, Globe2, ArrowRight, Download, Send, Menu, X, CheckCircle, LogOut } from 'lucide-react';
 import { auth, authReady, db } from './firebase.js';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile } from 'firebase/auth';
 import { addDoc, collection, doc, getDoc, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
 import './styles.css';
 
 const dict={
- ru:{home:'Главная',chat:'AI Чат',image:'Генератор изображений',history:'История',pricing:'Тарифы',faq:'FAQ',login:'Войти',start:'Начать бесплатно',hero1:'Ваш AI-помощник',hero2:'для общения и творчества',heroText:'Общайтесь с ИИ, генерируйте изображения и воплощайте любые идеи в реальность',free:'5 бесплатных кредитов после регистрации',chatTitle:'AI Чат',chatDesc:'Задавайте любые вопросы и получайте умные ответы',imgTitle:'Генерация изображений',imgDesc:'Создавайте уникальные изображения по текстовому описанию',fastTitle:'Быстро и просто',fastDesc:'Современные AI-модели для максимального результата',users:'Пользователей',dialogs:'AI диалогов',created:'Создано изображений',uptime:'Доступность сервиса',safe:'Безопасно',safeD:'Ваши данные под защитой',conf:'Конфиденциально',confD:'Мы не передаем данные третьим лицам',quick:'Быстро',quickD:'Мгновенные ответы и генерация',unlim:'Без ограничений',unlimD:'Творите и общайтесь без границ',placeholder:'Напишите вопрос ИИ...',send:'Отправить',demo:'Это демо-ответ. После подключения API здесь будет настоящий ответ ИИ.',prompt:'Опишите изображение...',generate:'Создать изображение',credits:'Кредиты',profile:'Профиль',email:'Email',password:'Пароль',register:'Регистрация',logout:'Выйти',name:'Имя',buy:'Купить кредиты',empty:'Пока пусто',tariffs:'Тарифы',soon:'Оплата будет подключена позже',haveAccount:'Уже есть аккаунт?',noAccount:'Нет аккаунта?',signin:'Войти в аккаунт',signup:'Создать аккаунт',error:'Ошибка',loading:'Загрузка...',needLogin:'Войдите или зарегистрируйтесь',createdAcc:'Аккаунт создан'},
- en:{home:'Home',chat:'AI Chat',image:'Image Generator',history:'History',pricing:'Pricing',faq:'FAQ',login:'Login',start:'Start free',hero1:'Your AI assistant',hero2:'for chat and creativity',heroText:'Chat with AI, generate images and turn any idea into reality',free:'5 free credits after registration',chatTitle:'AI Chat',chatDesc:'Ask anything and get smart answers',imgTitle:'Image generation',imgDesc:'Create unique images from text prompts',fastTitle:'Fast and simple',fastDesc:'Modern AI models for maximum results',users:'Users',dialogs:'AI dialogs',created:'Images created',uptime:'Service uptime',safe:'Secure',safeD:'Your data is protected',conf:'Private',confD:'We do not share your data',quick:'Fast',quickD:'Instant answers and generation',unlim:'Unlimited',unlimD:'Create and chat without limits',placeholder:'Ask AI something...',send:'Send',demo:'This is a demo answer. After API setup, real AI responses will appear here.',prompt:'Describe an image...',generate:'Generate image',credits:'Credits',profile:'Profile',email:'Email',password:'Password',register:'Register',logout:'Logout',name:'Name',buy:'Buy credits',empty:'Nothing here yet',tariffs:'Pricing',soon:'Payments will be connected later',haveAccount:'Already have an account?',noAccount:'No account?',signin:'Sign in',signup:'Create account',error:'Error',loading:'Loading...',needLogin:'Sign in or register',createdAcc:'Account created'}
+ ru:{home:'Главная',chat:'AI Чат',image:'Генератор изображений',history:'История',pricing:'Тарифы',faq:'FAQ',login:'Войти',start:'Начать бесплатно',hero1:'Ваш AI-помощник',hero2:'для общения и творчества',heroText:'Общайтесь с ИИ, генерируйте изображения и воплощайте любые идеи в реальность',free:'5 бесплатных кредитов после регистрации',chatTitle:'AI Чат',chatDesc:'Задавайте любые вопросы и получайте умные ответы',imgTitle:'Генерация изображений',imgDesc:'Создавайте уникальные изображения по текстовому описанию',fastTitle:'Быстро и просто',fastDesc:'Современные AI-модели для максимального результата',users:'Пользователей',dialogs:'AI диалогов',created:'Создано изображений',uptime:'Доступность сервиса',safe:'Безопасно',safeD:'Ваши данные под защитой',conf:'Конфиденциально',confD:'Мы не передаем данные третьим лицам',quick:'Быстро',quickD:'Мгновенные ответы и генерация',unlim:'Без ограничений',unlimD:'Творите и общайтесь без границ',placeholder:'Напишите вопрос ИИ...',send:'Отправить',demo:'Это демо-ответ. После подключения API здесь будет настоящий ответ ИИ.',prompt:'Опишите изображение...',generate:'Создать изображение',credits:'Кредиты',profile:'Профиль',email:'Email',password:'Пароль',register:'Регистрация',logout:'Выйти',name:'Имя',buy:'Купить кредиты',empty:'Пока пусто',tariffs:'Тарифы',soon:'Оплата будет подключена позже',haveAccount:'Уже есть аккаунт?',noAccount:'Нет аккаунта?',signin:'Войти в аккаунт',signup:'Создать аккаунт',error:'Ошибка',loading:'Загрузка...',needLogin:'Войдите или зарегистрируйтесь',createdAcc:'Аккаунт создан', loginSuccess:'Вы успешно вошли', registerSuccess:'Вы успешно зарегистрированы', logoutSuccess:'Вы вышли из аккаунта'},
+ en:{home:'Home',chat:'AI Chat',image:'Image Generator',history:'History',pricing:'Pricing',faq:'FAQ',login:'Login',start:'Start free',hero1:'Your AI assistant',hero2:'for chat and creativity',heroText:'Chat with AI, generate images and turn any idea into reality',free:'5 free credits after registration',chatTitle:'AI Chat',chatDesc:'Ask anything and get smart answers',imgTitle:'Image generation',imgDesc:'Create unique images from text prompts',fastTitle:'Fast and simple',fastDesc:'Modern AI models for maximum results',users:'Users',dialogs:'AI dialogs',created:'Images created',uptime:'Service uptime',safe:'Secure',safeD:'Your data is protected',conf:'Private',confD:'We do not share your data',quick:'Fast',quickD:'Instant answers and generation',unlim:'Unlimited',unlimD:'Create and chat without limits',placeholder:'Ask AI something...',send:'Send',demo:'This is a demo answer. After API setup, real AI responses will appear here.',prompt:'Describe an image...',generate:'Generate image',credits:'Credits',profile:'Profile',email:'Email',password:'Password',register:'Register',logout:'Logout',name:'Name',buy:'Buy credits',empty:'Nothing here yet',tariffs:'Pricing',soon:'Payments will be connected later',haveAccount:'Already have an account?',noAccount:'No account?',signin:'Sign in',signup:'Create account',error:'Error',loading:'Loading...',needLogin:'Sign in or register',createdAcc:'Account created', loginSuccess:'You have successfully signed in', registerSuccess:'You have successfully registered', logoutSuccess:'You have signed out'}
 };
 
 function mapFirebaseError(e){
@@ -29,8 +29,11 @@ function App(){
  const[profile,setProfile]=useState(null);
  const[history,setHistory]=useState([]);
  const[authLoading,setAuthLoading]=useState(true);
+ const[toast,setToast]=useState('');
  const t=dict[lang];
  const nav=['home','chat','image','history','pricing','faq'];
+ function showToast(text){ setToast(text); window.clearTimeout(window.__npToastTimer); window.__npToastTimer=window.setTimeout(()=>setToast(''),3200); }
+ function go(nextPage){ setPage(nextPage); try{ localStorage.setItem('neuropic_page', nextPage); }catch(e){} }
 
  useEffect(()=>{
   let unsubAuth = null;
@@ -50,11 +53,19 @@ function App(){
           setUser(null);
           setProfile(null);
           setHistory([]);
+          setPage(prev=>['chat','image','history','profile'].includes(prev)?'home':prev);
           setAuthLoading(false);
           return;
         }
 
         setUser(fbUser);
+        setPage(prev=>{
+          if(prev==='login'||prev==='home'){
+            try{const saved=localStorage.getItem('neuropic_page'); if(saved&&saved!=='login'&&saved!=='home') return saved;}catch(e){}
+            return 'image';
+          }
+          return prev;
+        });
         const ref=doc(db,'users',fbUser.uid);
         const snap=await getDoc(ref);
         if(!snap.exists()){
@@ -90,39 +101,41 @@ function App(){
   await updateDoc(doc(db,'users',user.uid),{credits:credits-1});
   return true;
  }
- async function logout(){await signOut(auth); setPage('home');}
+ async function logout(){await signOut(auth); try{localStorage.removeItem('neuropic_page')}catch(e){} setPage('home'); showToast(t.logoutSuccess);}
 
  return <>
   <header>
-   <div className="brand" onClick={()=>setPage('home')}><Brain/><b>NeuroPic <span>AI</span></b></div>
-   <nav className={mobile?'open':''}>{nav.map(n=><button key={n} onClick={()=>{setPage(n);setMobile(false)}} className={page===n?'active':''}>{t[n]}</button>)}</nav>
+   <div className="brand" onClick={()=>go(user?'image':'home')}><Brain/><b>NeuroPic <span>AI</span></b></div>
+   <nav className={mobile?'open':''}>{nav.map(n=><button key={n} onClick={()=>{go(n);setMobile(false)}} className={page===n?'active':''}>{t[n]}</button>)}{user&&<><button onClick={()=>{go('profile');setMobile(false)}} className={page==='profile'?'active':''}>{t.profile}</button><button onClick={()=>{logout();setMobile(false)}}>{t.logout}</button></>}</nav>
    <div className="actions">
     <button className="pill" onClick={()=>setLang(lang==='ru'?'en':'ru')}><Globe2 size={16}/>{lang.toUpperCase()}</button>
-    {user?<button className="outline" onClick={()=>setPage('profile')}>{profile?.name||user.email} • {credits}</button>:<button className="outline" onClick={()=>setPage('login')}>{t.login}</button>}
-    <button className="cta" onClick={()=>setPage(user?'image':'login')}>{t.start}</button>
+    {user?<button className="outline userbtn" onClick={()=>go('profile')}><User size={16}/>{profile?.name||user.email} • {credits}</button>:<button className="outline" onClick={()=>go('login')}>{t.login}</button>}
+    {!user&&<button className="cta" onClick={()=>go('login')}>{t.start}</button>}
+    {user&&<button className="outline logoutbtn" onClick={logout}><LogOut size={16}/>{t.logout}</button>}
     <button className="burger" onClick={()=>setMobile(!mobile)}>{mobile?<X/>:<Menu/>}</button>
    </div>
   </header>
+  {toast&&<div className="toast"><CheckCircle size={18}/>{toast}</div>}
   <main>
    {authLoading&&<section className="panel auth"><h2>{t.loading}</h2></section>}
-   {!authLoading&&page==='home'&&<Home t={t} setPage={setPage}/>} 
-   {!authLoading&&page==='login'&&<Auth t={t} setPage={setPage}/>} 
-   {!authLoading&&page==='chat'&&<Chat t={t} user={user} setPage={setPage} lang={lang} addHistory={addHistory}/>} 
-   {!authLoading&&page==='image'&&<ImageGen t={t} user={user} setPage={setPage} credits={credits} dec={dec} addHistory={addHistory}/>} 
+   {!authLoading&&page==='home'&&<Home t={t} setPage={go} user={user}/>} 
+   {!authLoading&&page==='login'&&<Auth t={t} setPage={go} showToast={showToast}/>} 
+   {!authLoading&&page==='chat'&&<Chat t={t} user={user} setPage={go} lang={lang} addHistory={addHistory}/>} 
+   {!authLoading&&page==='image'&&<ImageGen t={t} user={user} setPage={go} credits={credits} dec={dec} addHistory={addHistory}/>} 
    {!authLoading&&page==='history'&&<History t={t} history={history}/>} 
    {!authLoading&&page==='pricing'&&<Pricing t={t}/>} 
-   {!authLoading&&page==='profile'&&<Profile t={t} user={user} profile={profile} credits={credits} logout={logout} setPage={setPage}/>} 
+   {!authLoading&&page==='profile'&&<Profile t={t} user={user} profile={profile} credits={credits} logout={logout} setPage={go}/>} 
    {!authLoading&&page==='faq'&&<FAQ lang={lang}/>} 
   </main>
   <footer>© 2026 NeuroPic AI • RU / EN • Firebase MVP</footer>
  </>;
 }
 
-function Home({t,setPage}){return <section className="hero"><div className="heroText"><h1>{t.hero1}<br/><span>{t.hero2}</span></h1><p>{t.heroText}</p><div className="heroBtns"><button className="cta big" onClick={()=>setPage('login')}>{t.start}<ArrowRight/></button><button className="outline big" onClick={()=>setPage('login')}>{t.login}<User/></button></div><div className="gift"><Gift/>{t.free}</div></div><div className="orb"><div className="brain"><Brain/><b>AI</b></div></div><div className="cards"><Card icon={<MessageSquare/>} title={t.chatTitle} desc={t.chatDesc}/><Card icon={<Image/>} title={t.imgTitle} desc={t.imgDesc}/><Card icon={<Zap/>} title={t.fastTitle} desc={t.fastDesc}/></div><div className="stats"><Stat n="10K+" l={t.users}/><Stat n="50K+" l={t.dialogs}/><Stat n="30K+" l={t.created}/><Stat n="99.9%" l={t.uptime}/></div><div className="mini"><Card icon={<Shield/>} title={t.safe} desc={t.safeD}/><Card icon={<Lock/>} title={t.conf} desc={t.confD}/><Card icon={<Rocket/>} title={t.quick} desc={t.quickD}/><Card icon={<Infinity/>} title={t.unlim} desc={t.unlimD}/></div></section>}
+function Home({t,setPage,user}){return <section className="hero"><div className="heroText"><h1>{t.hero1}<br/><span>{t.hero2}</span></h1><p>{t.heroText}</p><div className="heroBtns"><button className="cta big" onClick={()=>setPage(user?'image':'login')}>{user?t.image:t.start}<ArrowRight/></button>{!user&&<button className="outline big" onClick={()=>setPage('login')}>{t.login}<User/></button>}{user&&<button className="outline big" onClick={()=>setPage('profile')}>{t.profile}<User/></button>}</div><div className="gift"><Gift/>{t.free}</div></div><div className="orb"><div className="brain"><Brain/><b>AI</b></div></div><div className="cards"><Card icon={<MessageSquare/>} title={t.chatTitle} desc={t.chatDesc}/><Card icon={<Image/>} title={t.imgTitle} desc={t.imgDesc}/><Card icon={<Zap/>} title={t.fastTitle} desc={t.fastDesc}/></div><div className="stats"><Stat n="10K+" l={t.users}/><Stat n="50K+" l={t.dialogs}/><Stat n="30K+" l={t.created}/><Stat n="99.9%" l={t.uptime}/></div><div className="mini"><Card icon={<Shield/>} title={t.safe} desc={t.safeD}/><Card icon={<Lock/>} title={t.conf} desc={t.confD}/><Card icon={<Rocket/>} title={t.quick} desc={t.quickD}/><Card icon={<Infinity/>} title={t.unlim} desc={t.unlimD}/></div></section>}
 function Card(p){return <div className="card"><div className="ico">{p.icon}</div><h3>{p.title}</h3><p>{p.desc}</p></div>}
 function Stat({n,l}){return <div><b>{n}</b><span>{l}</span></div>}
 
-function Auth({t,setPage}){
+function Auth({t,setPage,showToast}){
  const[mode,setMode]=useState('register');
  const[name,setName]=useState('');
  const[email,setEmail]=useState('');
@@ -136,8 +149,10 @@ function Auth({t,setPage}){
     const cred=await createUserWithEmailAndPassword(auth,email,password);
     await updateProfile(cred.user,{displayName:name||'User'});
     await setDoc(doc(db,'users',cred.user.uid),{uid:cred.user.uid,name:name||'User',email:cred.user.email,credits:5,createdAt:serverTimestamp()},{merge:true});
+    showToast(t.registerSuccess);
    }else{
     await signInWithEmailAndPassword(auth,email,password);
+    showToast(t.loginSuccess);
    }
    setPage('image');
   }catch(e){setError(mapFirebaseError(e));}

@@ -2,3 +2,5 @@
 .linkbtn{background:none;border:0;color:var(--g);font-weight:800;cursor:pointer;font-size:inherit}.linkbtn:hover{text-decoration:underline}button:disabled{opacity:.55;cursor:not-allowed}.warn{color:#ff6868;font-weight:700}.credits b{color:var(--g)}
 
 .notice{color:var(--g);font-weight:700;margin:14px 0}
+.toast{position:fixed;top:96px;left:50%;transform:translateX(-50%);z-index:99;background:#071207;border:1px solid var(--g);box-shadow:0 0 28px #55ff1266;color:white;border-radius:14px;padding:14px 18px;display:flex;align-items:center;gap:10px;font-weight:800}.toast svg{color:var(--g)}.logoutbtn{border-color:#55ff12;color:white}.userbtn{max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media(max-width:900px){.actions .userbtn{display:inline-flex!important;max-width:145px;padding:12px}.actions .logoutbtn{display:none}.toast{top:86px;width:calc(100% - 28px);justify-content:center}.heroBtns .outline{display:inline-flex!important}}
