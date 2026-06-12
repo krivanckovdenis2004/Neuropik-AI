@@ -1,266 +1,230 @@
-const TELEGRAM_API = 'https://api.telegram.org/bot';
-const DEFAULT_MODEL = process.env.ROCKAPI_CHAT_MODEL || 'gpt-4o-mini';
-const FREE_CREDITS = Number(process.env.TELEGRAM_FREE_CREDITS || 20);
 
-function tgUrl(method) {
-  return `${TELEGRAM_API}${process.env.TELEGRAM_BOT_TOKEN}/${method}`;
+import { initializeApp, getApps, cert } from 'firebase-admin/app';
+import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+
+function initAdmin() {
+  if (getApps().length) return;
+  const projectId = process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID;
+  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+  const privateKey = (process.env.FIREBASE_PRIVATE_KEY || '').replace(/\\n/g, '\n');
+
+  if (projectId && clientEmail && privateKey) {
+    initializeApp({
+      credential: cert({ projectId, clientEmail, privateKey })
+    });
+  } else {
+    initializeApp({ projectId });
+  }
 }
 
-async function sendMessage(chatId, text, extra = {}) {
-  await fetch(tgUrl('sendMessage'), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      chat_id: chatId,
-      text,
-      parse_mode: 'HTML',
-      disable_web_page_preview: true,
-      ...extra
-    })
-  });
-}
-
-async function answerCallbackQuery(callbackQueryId, text = '') {
-  await fetch(tgUrl('answerCallbackQuery'), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ callback_query_id: callbackQueryId, text })
-  });
-}
-
-function menuKeyboard() {
-  return {
-    reply_markup: {
-      inline_keyboard: [
-        [
-          { text: '🤖 AI Чат', callback_data: 'chat' },
-          { text: '🎨 Картинки', callback_data: 'image' }
-        ],
-        [
-          { text: '💎 Баланс', callback_data: 'balance' },
-          { text: '👤 Профиль', callback_data: 'profile' }
-        ],
-        [
-          { text: '🧹 Очистить память', callback_data: 'clear' },
-          { text: '🌐 Сайт', url: 'https://neuropik-ai.vercel.app' }
-        ]
-      ]
-    }
+async function sendTelegram(chatId, text, keyboard = true) {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  const body = {
+    chat_id: chatId,
+    text,
+    parse_mode: 'HTML',
+    disable_web_page_preview: true
   };
-}
 
-function firebaseConfig() {
-  const projectId = process.env.VITE_FIREBASE_PROJECT_ID || process.env.FIREBASE_PROJECT_ID;
-  const apiKey = process.env.VITE_FIREBASE_API_KEY || process.env.FIREBASE_API_KEY;
-  if (!projectId || !apiKey) return null;
-  return { projectId, apiKey };
-}
-
-function tgUserDocUrl(id) {
-  const cfg = firebaseConfig();
-  if (!cfg) return null;
-  return `https://firestore.googleapis.com/v1/projects/${cfg.projectId}/databases/(default)/documents/tgUsers/${id}?key=${cfg.apiKey}`;
-}
-
-function toFirestoreValue(value) {
-  if (typeof value === 'number') return { integerValue: String(value) };
-  if (typeof value === 'boolean') return { booleanValue: value };
-  if (Array.isArray(value)) return { arrayValue: { values: value.map(toFirestoreValue) } };
-  if (value && typeof value === 'object') {
-    const fields = {};
-    for (const [k, v] of Object.entries(value)) fields[k] = toFirestoreValue(v);
-    return { mapValue: { fields } };
-  }
-  return { stringValue: String(value ?? '') };
-}
-
-function fromFirestoreValue(v) {
-  if (!v) return null;
-  if ('stringValue' in v) return v.stringValue;
-  if ('integerValue' in v) return Number(v.integerValue);
-  if ('booleanValue' in v) return Boolean(v.booleanValue);
-  if ('timestampValue' in v) return v.timestampValue;
-  if ('arrayValue' in v) return (v.arrayValue.values || []).map(fromFirestoreValue);
-  if ('mapValue' in v) {
-    const obj = {};
-    for (const [k, val] of Object.entries(v.mapValue.fields || {})) obj[k] = fromFirestoreValue(val);
-    return obj;
-  }
-  return null;
-}
-
-function docToUser(doc) {
-  const fields = doc?.fields || {};
-  const user = {};
-  for (const [k, v] of Object.entries(fields)) user[k] = fromFirestoreValue(v);
-  return user;
-}
-
-async function getTelegramUser(from) {
-  const url = tgUserDocUrl(from.id);
-  if (!url) {
-    return {
-      telegramId: String(from.id),
-      name: from.first_name || 'User',
-      username: from.username || '',
-      credits: FREE_CREDITS,
-      history: []
+  if (keyboard) {
+    body.reply_markup = {
+      keyboard: [
+        [{ text: '🤖 AI Чат' }, { text: '🎨 Картинки' }],
+        [{ text: '💎 Баланс' }, { text: '👤 Профиль' }],
+        [{ text: '🧹 Очистить память' }, { text: '🌐 Сайт' }]
+      ],
+      resize_keyboard: true
     };
   }
 
-  const res = await fetch(url);
-  if (res.ok) return docToUser(await res.json());
-
-  const user = {
-    telegramId: String(from.id),
-    name: from.first_name || 'User',
-    username: from.username || '',
-    credits: FREE_CREDITS,
-    history: [],
-    createdAt: new Date().toISOString()
-  };
-  await saveTelegramUser(user);
-  return user;
-}
-
-async function saveTelegramUser(user) {
-  const url = tgUserDocUrl(user.telegramId);
-  if (!url) return;
-  const fields = {};
-  for (const [k, v] of Object.entries(user)) fields[k] = toFirestoreValue(v);
-  await fetch(url, {
-    method: 'PATCH',
+  await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ fields })
+    body: JSON.stringify(body)
   });
 }
 
 async function askAI(messages) {
-  const baseUrl = process.env.ROCKAPI_BASE_URL || 'https://api.rockapi.ru/openai/v1';
   const rockKey = process.env.ROCKAPI_KEY;
+  const baseUrl = process.env.ROCKAPI_BASE_URL || 'https://api.rockapi.ru/openai/v1';
 
   const res = await fetch(`${baseUrl}/chat/completions`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${rockKey}`
+      'Authorization': `Bearer ${rockKey}`
     },
     body: JSON.stringify({
-      model: DEFAULT_MODEL,
+      model: process.env.ROCKAPI_CHAT_MODEL || 'gpt-4o-mini',
       messages,
       temperature: 0.7
     })
   });
 
   const data = await res.json();
-  if (!res.ok) throw new Error(data?.error?.message || data?.message || 'AI API error');
+
+  if (!res.ok) {
+    console.error('RockAPI error:', JSON.stringify(data));
+    throw new Error(data?.error?.message || data?.message || 'Ошибка AI API');
+  }
+
   return data?.choices?.[0]?.message?.content || 'Не получилось получить ответ.';
 }
 
-async function handleStart(chatId, from) {
-  await getTelegramUser(from);
-  await sendMessage(
-    chatId,
-    '👋 <b>Привет! Я NeuroPic AI.</b>\n\nМогу отвечать на вопросы, помогать с текстами, идеями, кодом и контентом.\n\nПросто напиши сообщение — я отвечу.',
-    menuKeyboard()
-  );
-}
-
-async function handleCallback(callback) {
-  const chatId = callback.message.chat.id;
-  const from = callback.from;
-  const data = callback.data;
-  const user = await getTelegramUser(from);
-
-  await answerCallbackQuery(callback.id);
-
-  if (data === 'chat') {
-    return sendMessage(chatId, '🤖 <b>AI Чат</b>\n\nНапиши любой вопрос обычным сообщением, и я отвечу.', menuKeyboard());
-  }
-
-  if (data === 'image') {
-    return sendMessage(chatId, '🎨 <b>Генерация картинок</b>\n\nСкоро подключим команду:\n<code>/image собака на велосипеде</code>\n\nПока доступен AI-чат.', menuKeyboard());
-  }
-
-  if (data === 'balance') {
-    return sendMessage(chatId, `💎 <b>Баланс</b>\n\nУ вас осталось запросов: <b>${user.credits ?? 0}</b>`, menuKeyboard());
-  }
-
-  if (data === 'profile') {
-    const username = user.username ? '@' + user.username : 'не указан';
-    return sendMessage(chatId, `👤 <b>Профиль</b>\n\nИмя: <b>${user.name || 'User'}</b>\nUsername: <b>${username}</b>\nID: <code>${user.telegramId}</code>\nБаланс: <b>${user.credits ?? 0}</b>`, menuKeyboard());
-  }
-
-  if (data === 'clear') {
-    user.history = [];
-    await saveTelegramUser(user);
-    return sendMessage(chatId, '🧹 Память диалога очищена.', menuKeyboard());
-  }
-}
-
-async function handleText(message) {
-  const chatId = message.chat.id;
-  const from = message.from;
-  const text = (message.text || '').trim();
-
-  if (text === '/start') return handleStart(chatId, from);
-  if (text === '/menu') return handleStart(chatId, from);
-  if (text === '/clear') {
-    const user = await getTelegramUser(from);
-    user.history = [];
-    await saveTelegramUser(user);
-    return sendMessage(chatId, '🧹 Память диалога очищена.', menuKeyboard());
-  }
-
-  const user = await getTelegramUser(from);
-  if ((user.credits ?? 0) <= 0) {
-    return sendMessage(chatId, '💎 Бесплатные запросы закончились. Скоро добавим пополнение баланса.', menuKeyboard());
-  }
-
-  const history = Array.isArray(user.history) ? user.history.slice(-12) : [];
-  const messages = [
-    {
-      role: 'system',
-      content: 'Ты NeuroPic AI — дружелюбный ИИ-помощник. Отвечай на русском, если пользователь пишет на русском. Отвечай понятно, кратко и полезно.'
-    },
-    ...history,
-    { role: 'user', content: text }
-  ];
-
-  const reply = await askAI(messages);
-  const updatedHistory = [...history, { role: 'user', content: text }, { role: 'assistant', content: reply }].slice(-16);
-
-  user.history = updatedHistory;
-  user.credits = Math.max(0, Number(user.credits ?? FREE_CREDITS) - 1);
-  user.updatedAt = new Date().toISOString();
-  await saveTelegramUser(user);
-
-  await sendMessage(chatId, reply, menuKeyboard());
-}
-
 export default async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(200).json({ ok: true, message: 'NeuroPic Telegram webhook is active' });
+  if (req.method !== 'POST') return res.status(200).json({ ok: true });
 
   try {
-    const update = req.body;
+    initAdmin();
+    const db = getFirestore();
 
-    if (update.callback_query) {
-      await handleCallback(update.callback_query);
+    const msg = req.body?.message;
+    if (!msg || !msg.chat || !msg.text) return res.status(200).json({ ok: true });
+
+    const chatId = msg.chat.id;
+    const telegramId = String(msg.from?.id || chatId);
+    const text = String(msg.text || '').trim();
+
+    const userRef = db.collection('telegramUsers').doc(telegramId);
+    const userSnap = await userRef.get();
+
+    if (!userSnap.exists) {
+      await userRef.set({
+        telegramId,
+        chatId,
+        firstName: msg.from?.first_name || '',
+        username: msg.from?.username || '',
+        requestsLeft: 20,
+        createdAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp()
+      });
+    } else {
+      await userRef.set({
+        chatId,
+        firstName: msg.from?.first_name || '',
+        username: msg.from?.username || '',
+        updatedAt: FieldValue.serverTimestamp()
+      }, { merge: true });
+    }
+
+    const freshSnap = await userRef.get();
+    const user = freshSnap.data() || {};
+    const left = Number(user.requestsLeft ?? 20);
+
+    if (text === '/start' || text === 'start') {
+      await sendTelegram(chatId,
+`👋 <b>Привет! Я NeuroPic AI.</b>
+
+Могу отвечать на вопросы, помогать с текстами, идеями, кодом и контентом.
+
+Просто напишите обычное сообщение — и я отвечу.
+
+Бесплатный лимит: <b>${left}</b> запросов.`
+      );
       return res.status(200).json({ ok: true });
     }
 
-    if (update.message?.text) {
-      await handleText(update.message);
+    if (text === '🤖 AI Чат' || text.toLowerCase() === 'ai chat') {
+      await sendTelegram(chatId, '🤖 Напишите любой вопрос обычным сообщением, и я отвечу.');
       return res.status(200).json({ ok: true });
     }
 
+    if (text === '🎨 Картинки') {
+      await sendTelegram(chatId,
+`🎨 Генерация картинок скоро будет подключена.
+
+Позже можно будет писать так:
+/image собака на велосипеде`
+      );
+      return res.status(200).json({ ok: true });
+    }
+
+    if (text === '💎 Баланс') {
+      await sendTelegram(chatId, `💎 Ваш баланс: <b>${left}</b> AI-запросов.`);
+      return res.status(200).json({ ok: true });
+    }
+
+    if (text === '👤 Профиль') {
+      await sendTelegram(chatId,
+`👤 <b>Профиль</b>
+
+ID: <code>${telegramId}</code>
+Имя: ${msg.from?.first_name || 'не указано'}
+Username: ${msg.from?.username ? '@' + msg.from.username : 'не указан'}
+Баланс: <b>${left}</b> запросов`
+      );
+      return res.status(200).json({ ok: true });
+    }
+
+    if (text === '🧹 Очистить память') {
+      const historySnap = await userRef.collection('messages').get();
+      const batch = db.batch();
+      historySnap.forEach(doc => batch.delete(doc.ref));
+      await batch.commit();
+      await sendTelegram(chatId, '🧹 Память диалога очищена.');
+      return res.status(200).json({ ok: true });
+    }
+
+    if (text === '🌐 Сайт') {
+      await sendTelegram(chatId, '🌐 Сайт NeuroPic AI:\nhttps://neuropik-ai.vercel.app');
+      return res.status(200).json({ ok: true });
+    }
+
+    if (left <= 0) {
+      await sendTelegram(chatId, '💎 Бесплатные запросы закончились. Скоро добавим пополнение баланса.');
+      return res.status(200).json({ ok: true });
+    }
+
+    // Save user message
+    await userRef.collection('messages').add({
+      role: 'user',
+      content: text,
+      createdAt: FieldValue.serverTimestamp()
+    });
+
+    // Load last 12 messages for memory
+    const histSnap = await userRef.collection('messages')
+      .orderBy('createdAt', 'desc')
+      .limit(12)
+      .get();
+
+    const history = [];
+    histSnap.docs.reverse().forEach(doc => {
+      const d = doc.data();
+      if (d.role && d.content) history.push({ role: d.role, content: d.content });
+    });
+
+    const messages = [
+      {
+        role: 'system',
+        content: 'Ты NeuroPic AI — дружелюбный русскоязычный AI-помощник. Отвечай полезно, понятно и не слишком длинно.'
+      },
+      ...history
+    ];
+
+    const reply = await askAI(messages);
+
+    await userRef.collection('messages').add({
+      role: 'assistant',
+      content: reply,
+      createdAt: FieldValue.serverTimestamp()
+    });
+
+    await userRef.set({
+      requestsLeft: FieldValue.increment(-1),
+      updatedAt: FieldValue.serverTimestamp()
+    }, { merge: true });
+
+    await sendTelegram(chatId, reply);
     return res.status(200).json({ ok: true });
-  } catch (error) {
-    console.error('Telegram webhook error:', error);
-    try {
-      const chatId = req.body?.message?.chat?.id || req.body?.callback_query?.message?.chat?.id;
-      if (chatId) await sendMessage(chatId, 'Ошибка на сервере. Попробуйте ещё раз чуть позже.');
-    } catch (_) {}
-    return res.status(200).json({ ok: false, error: String(error?.message || error) });
+  } catch (e) {
+    console.error('Telegram handler error:', e);
+    const chatId = req.body?.message?.chat?.id;
+    if (chatId) {
+      try {
+        await sendTelegram(chatId, '⚠️ Ошибка обработки сообщения. Попробуйте ещё раз чуть позже.');
+      } catch {}
+    }
+    return res.status(200).json({ ok: false, error: String(e) });
   }
 }
