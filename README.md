@@ -28,5 +28,3 @@ npm run dev
 - API route для OpenAI/другого AI API
 - Настоящая генерация изображений
 - YooKassa/CryptoBot для покупки кредитов
-
-Firebase added. Use VITE_FIREBASE_* env vars.
