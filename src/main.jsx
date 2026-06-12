@@ -1,7 +1,7 @@
 import React, {useEffect, useState} from 'react';
 import { createRoot } from 'react-dom/client';
 import { Brain, Image, MessageSquare, Zap, Shield, Lock, Rocket, Infinity, Gift, User, Globe2, ArrowRight, Download, Send, Menu, X } from 'lucide-react';
-import { auth, db } from './firebase.js';
+import { auth, authReady, db } from './firebase.js';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile } from 'firebase/auth';
 import { addDoc, collection, doc, getDoc, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
 import './styles.css';
@@ -33,24 +33,51 @@ function App(){
  const nav=['home','chat','image','history','pricing','faq'];
 
  useEffect(()=>{
-  const unsub=onAuthStateChanged(auth,async(fbUser)=>{
-   setAuthLoading(true);
-   try{
-    if(!fbUser){setUser(null);setProfile(null);setHistory([]);setAuthLoading(false);return;}
-    setUser(fbUser);
-    const ref=doc(db,'users',fbUser.uid);
-    const snap=await getDoc(ref);
-    if(!snap.exists()){
-     await setDoc(ref,{uid:fbUser.uid,name:fbUser.displayName||'User',email:fbUser.email,credits:5,createdAt:serverTimestamp()});
-    }
-    const unsubProfile=onSnapshot(ref,(s)=>setProfile(s.exists()?s.data():null));
-    const q=query(collection(db,'users',fbUser.uid,'history'),orderBy('createdAt','desc'));
-    const unsubHistory=onSnapshot(q,(s)=>setHistory(s.docs.map(d=>({id:d.id,...d.data()}))));
-    setAuthLoading(false);
-    return ()=>{unsubProfile();unsubHistory();};
-   }catch(e){console.error(e);setAuthLoading(false);}
+  let unsubAuth = null;
+  let unsubProfile = null;
+  let unsubHistory = null;
+  let cancelled = false;
+
+  authReady.finally(()=>{
+    if(cancelled) return;
+    unsubAuth = onAuthStateChanged(auth, async (fbUser)=>{
+      setAuthLoading(true);
+      try{
+        if(unsubProfile){unsubProfile(); unsubProfile=null;}
+        if(unsubHistory){unsubHistory(); unsubHistory=null;}
+
+        if(!fbUser){
+          setUser(null);
+          setProfile(null);
+          setHistory([]);
+          setAuthLoading(false);
+          return;
+        }
+
+        setUser(fbUser);
+        const ref=doc(db,'users',fbUser.uid);
+        const snap=await getDoc(ref);
+        if(!snap.exists()){
+          await setDoc(ref,{uid:fbUser.uid,name:fbUser.displayName||'User',email:fbUser.email,credits:5,createdAt:serverTimestamp()});
+        }
+
+        unsubProfile=onSnapshot(ref,(s)=>setProfile(s.exists()?s.data():null), (e)=>console.error('Profile snapshot error:', e));
+        const q=query(collection(db,'users',fbUser.uid,'history'),orderBy('createdAt','desc'));
+        unsubHistory=onSnapshot(q,(s)=>setHistory(s.docs.map(d=>({id:d.id,...d.data()}))), (e)=>console.error('History snapshot error:', e));
+        setAuthLoading(false);
+      }catch(e){
+        console.error(e);
+        setAuthLoading(false);
+      }
+    });
   });
-  return ()=>unsub();
+
+  return ()=>{
+    cancelled=true;
+    if(unsubAuth) unsubAuth();
+    if(unsubProfile) unsubProfile();
+    if(unsubHistory) unsubHistory();
+  };
  },[]);
 
  const credits=profile?.credits ?? 0;
@@ -121,7 +148,7 @@ function Auth({t,setPage}){
 
 function Chat({t,user,setPage,lang,addHistory}){const[msg,setMsg]=useState('');const[list,setList]=useState([]);const[busy,setBusy]=useState(false);const[error,setError]=useState('');if(!user)return <NeedLogin t={t} setPage={setPage}/>;async function send(){const text=msg.trim();if(!text||busy)return;setError('');const next=[...list,{role:'me',text}];setList(next);setMsg('');setBusy(true);try{const apiMessages=list.map(m=>({role:m.role==='me'?'user':'assistant',content:m.text}));const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:text,messages:apiMessages,lang})});const data=await r.json();if(!r.ok)throw new Error(data?.error||'API error');const answer=data.answer||'Ответ пустой';setList([...next,{role:'ai',text:answer}]);await addHistory({type:'chat',prompt:text,answer,status:'completed',model:data.model||'gpt-4o-mini'});}catch(e){console.error(e);setError(e.message||'Ошибка API');setList([...next,{role:'ai',text:'Ошибка API: '+(e.message||'проверь ROCKAPI_KEY и баланс')}]);}setBusy(false);}return <section className="panel chat"><h2>{t.chatTitle}</h2><div className="chatbox">{list.map((m,i)=><div key={i} className={m.role}>{m.text}</div>)}{busy&&<div className="ai">{t.loading}</div>}</div>{error&&<p className="warn">{error}</p>}<div className="inputrow"><input value={msg} onChange={e=>setMsg(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')send()}} placeholder={t.placeholder}/><button className="cta" disabled={busy||!msg.trim()} onClick={send}><Send size={18}/>{busy?t.loading:t.send}</button></div></section>}
 
-function ImageGen({t,user,setPage,credits,dec,addHistory}){const[p,setP]=useState('');const[img,setImg]=useState('');const[busy,setBusy]=useState(false);const[status,setStatus]=useState('');if(!user)return <NeedLogin t={t} setPage={setPage}/>;async function generate(){const prompt=p.trim();if(!prompt||credits<1||busy)return;setBusy(true);setStatus('Создаем изображение через AI...');let genRef=null;try{genRef=await addDoc(collection(db,'generations'),{uid:user.uid,email:user.email,prompt,type:'image',status:'pending',createdAt:serverTimestamp(),date:new Date().toLocaleString()});const r=await fetch('/api/image',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt,size:'1024x1024'})});const data=await r.json();if(!r.ok)throw new Error(data?.error||'Image API error');const imageUrl=data.imageUrl;if(!imageUrl)throw new Error('API не вернул картинку');setImg(imageUrl);await dec();await updateDoc(genRef,{status:'completed',img:imageUrl,model:data.model||'dall-e-2',completedAt:serverTimestamp()});await addHistory({generationId:genRef.id,type:'image',prompt,img:imageUrl,status:'completed',model:data.model||'dall-e-2'});setStatus('Готово. Картинка сохранена в историю');}catch(e){console.error(e);setStatus(e.message||'Ошибка генерации');if(genRef){try{await updateDoc(genRef,{status:'failed',error:e.message||'Ошибка генерации',failedAt:serverTimestamp()});}catch(_){}}}setBusy(false);}return <section className="panel"><h2>{t.imgTitle}</h2><div className="credits">{t.credits}: <b>{credits}</b></div><textarea value={p} onChange={e=>setP(e.target.value)} placeholder={t.prompt}/><button className="cta big" disabled={!p.trim()||credits<1||busy} onClick={generate}>{busy?t.loading:t.generate}</button>{status&&<p className={status.includes('Ошибка')||status.includes('API')?'warn':'notice'}>{status}</p>}{credits<1&&<p className="warn">{t.buy}</p>}{img&&<div className="result"><img src={img}/><a className="outline" download="neuropic-ai.png" href={img} target="_blank"><Download/>Download</a></div>}</section>}
+function ImageGen({t,user,setPage,credits,dec,addHistory}){const[p,setP]=useState('');const[img,setImg]=useState('');const[busy,setBusy]=useState(false);const[status,setStatus]=useState('');if(!user)return <NeedLogin t={t} setPage={setPage}/>;async function generate(){const prompt=p.trim();if(!prompt||credits<1||busy)return;setBusy(true);setStatus('Создаем изображение через DALL·E 3...');let genRef=null;try{genRef=await addDoc(collection(db,'generations'),{uid:user.uid,email:user.email,prompt,type:'image',status:'pending',createdAt:serverTimestamp(),date:new Date().toLocaleString()});const r=await fetch('/api/image',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt,size:'1024x1024'})});const data=await r.json();if(!r.ok)throw new Error(data?.error||'Image API error');const imageUrl=data.imageUrl;if(!imageUrl)throw new Error('API не вернул картинку');setImg(imageUrl);await dec();await updateDoc(genRef,{status:'completed',img:imageUrl,model:data.model||'dall-e-3',completedAt:serverTimestamp()});await addHistory({generationId:genRef.id,type:'image',prompt,img:imageUrl,status:'completed',model:data.model||'dall-e-3'});setStatus('Готово. Картинка сохранена в историю');}catch(e){console.error(e);setStatus(e.message||'Ошибка генерации');if(genRef){try{await updateDoc(genRef,{status:'failed',error:e.message||'Ошибка генерации',failedAt:serverTimestamp()});}catch(_){}}}setBusy(false);}return <section className="panel"><h2>{t.imgTitle}</h2><div className="credits">{t.credits}: <b>{credits}</b></div><textarea value={p} onChange={e=>setP(e.target.value)} placeholder={t.prompt}/><button className="cta big" disabled={!p.trim()||credits<1||busy} onClick={generate}>{busy?t.loading:t.generate}</button>{status&&<p className={status.includes('Ошибка')||status.includes('API')?'warn':'notice'}>{status}</p>}{credits<1&&<p className="warn">{t.buy}</p>}{img&&<div className="result"><img src={img}/><a className="outline" download="neuropic-ai.png" href={img} target="_blank"><Download/>Download</a></div>}</section>}
 
 function History({t,history}){return <section className="panel"><h2>{t.history}</h2>{!history.length?<p>{t.empty}</p>:<div className="gallery">{history.map((h,i)=><div className="work" key={h.id||i}>{h.img?<img src={h.img}/>:<div className="chatPreview"><MessageSquare/><span>{h.answer||'AI chat'}</span></div>}<b>{h.prompt}</b><small>{h.type==='chat'?'AI Chat':'Image'} • {h.date||''}</small></div>)}</div>}</section>}
 function Pricing({t}){return <section className="panel"><h2>{t.tariffs}</h2><div className="prices"><Plan n="Free" p="0₽" d="5 credits"/><Plan n="Start" p="199₽" d="100 credits"/><Plan n="Pro" p="499₽" d="350 credits"/></div><p>{t.soon}</p></section>}
